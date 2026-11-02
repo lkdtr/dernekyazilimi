@@ -146,7 +146,7 @@ class LetterPackage
             $package->imzaEkle($signature, new NihaiUstveri(
                 DateTimeImmutable::createFromInterface($letter->approved_at ?? $letter->document_date),
                 $letter->document_no,
-                array_map(fn (array $signer) => new Imza(new GercekSahis(
+                self::certificateSigner($signature) ?? array_map(fn (array $signer) => new Imza(new GercekSahis(
                     new Kisi($signer['first_name'], $signer['last_name']),
                     gorev: $signer['title'] ?? null,
                 )), $letter->signers ?? []),
@@ -240,6 +240,36 @@ class LetterPackage
         return $recipient->kind === LetterRecipient::INSTITUTION
             ? new KurumKurulus($recipient->identifier, $recipient->name, $contact)
             : new TuzelSahis(new Tanimlayici($recipient->identifier, 'MERSIS'), $recipient->name, $contact);
+    }
+
+    /**
+     * Whoever signed the package, as the certificate in the signature names
+     * them: the holder may differ from the signers of the letter. Null when
+     * the signature carries no certificate of a person.
+     *
+     * @return ?list<Imza>
+     */
+    private static function certificateSigner(string $signature): ?array
+    {
+        $pem = "-----BEGIN PKCS7-----\n".chunk_split(base64_encode($signature), 64, "\n")."-----END PKCS7-----\n";
+
+        if (! @openssl_pkcs7_read($pem, $certificates)) {
+            return null;
+        }
+
+        foreach ($certificates as $certificate) {
+            $parsed = openssl_x509_parse($certificate) ?: [];
+            $identity = (string) ($parsed['subject']['serialNumber'] ?? '');
+            $name = (string) ($parsed['subject']['CN'] ?? '');
+
+            if ($name !== '' && preg_match('/^\d{11}$/', $identity)) {
+                [$first, $last] = self::splitName($name);
+
+                return [new Imza(new GercekSahis(new Kisi($first, $last), $identity))];
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -88,14 +88,14 @@ class CorrespondenceTest extends TestCase
         return Storage::disk('local')->get($letter->signedPdfPath());
     }
 
-    private function cmsSignature(string $content): string
+    private function cmsSignature(string $content, array $subject = ['commonName' => 'Test signer']): string
     {
         $input = tmpfile();
         $output = tmpfile();
         try {
             fwrite($input, $content);
             $key = openssl_pkey_new(['private_key_bits' => 2048]);
-            $csr = openssl_csr_new(['commonName' => 'Test signer'], $key);
+            $csr = openssl_csr_new($subject, $key);
             $certificate = openssl_csr_sign($csr, null, $key, 1);
             $this->assertTrue(openssl_cms_sign(stream_get_meta_data($input)['uri'], stream_get_meta_data($output)['uri'], $certificate, $key, [], OPENSSL_CMS_BINARY, OPENSSL_ENCODING_DER));
             rewind($output);
@@ -452,6 +452,24 @@ class CorrespondenceTest extends TestCase
         $this->actingAs($owner)->get("/admin/correspondence/{$letter->id}")->assertSee('Paket tamamlandı: yapısı ve özet değerleri geçerli')->assertDontSee('Paketi sil');
         $this->actingAs($owner)->delete("/admin/correspondence/{$letter->id}/package")->assertForbidden();
         Storage::disk('local')->assertExists($letter->package_path);
+    }
+
+    public function test_the_signer_of_the_package_comes_from_the_certificate(): void
+    {
+        $owner = $this->owner();
+        $letter = $this->numbered($owner);
+        $this->signPdf($letter, $owner);
+        $this->actingAs($owner)->post("/admin/correspondence/{$letter->id}/package")->assertSessionHas('success-status');
+        $digest = $this->actingAs($owner)->get("/admin/correspondence/{$letter->id}/package/digest")->assertOk()->getContent();
+
+        $signature = $this->cmsSignature($digest, ['commonName' => 'BAHRİ MERİÇ CANLI', 'serialNumber' => '15757142316']);
+        $this->actingAs($owner)->post("/admin/correspondence/{$letter->id}/package/signature", ['file' => UploadedFile::fake()->createWithContent('imza.imz', $signature)])->assertSessionHas('success-status');
+
+        $signers = Paket::icerikten(Storage::disk('local')->get($letter->refresh()->package_path))->nihaiUstveri()->imzalar;
+        $this->assertCount(1, $signers);
+        $this->assertSame('BAHRİ MERİÇ', $signers[0]->imzalayan->kisi->ilkAdi);
+        $this->assertSame('CANLI', $signers[0]->imzalayan->kisi->soyadi);
+        $this->assertSame('15757142316', $signers[0]->imzalayan->tckn);
     }
 
     public function test_a_package_of_the_layout_before_2_0_is_complete_with_the_signature(): void
