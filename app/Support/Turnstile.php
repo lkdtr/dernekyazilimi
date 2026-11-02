@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Cloudflare Turnstile: the human check of public forms that start payments.
+ * Cloudflare Turnstile: the human check of public forms.
  * Off until both keys are in .env (TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY).
  */
 class Turnstile

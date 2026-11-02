@@ -3,9 +3,11 @@
 namespace Modules\Correspondence\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Support\Turnstile;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
+use Illuminate\Validation\ValidationException;
 use Modules\Correspondence\Models\Letter;
 use Modules\Correspondence\Models\LetterAttachment;
 use Modules\Correspondence\Support\LetterPdf;
@@ -30,10 +32,16 @@ class VerifyController extends Controller
         ], $code !== '' && ! $letter ? 404 : 200)->header('X-Robots-Tag', 'noindex, nofollow');
     }
 
-    public function verify(Request $request): JsonResponse
+    public function verify(Request $request, Turnstile $turnstile): JsonResponse
     {
         $request->merge(['kod' => is_string($request->query('kod')) ? strtoupper(trim($request->query('kod'))) : $request->query('kod')]);
-        $data = $request->validate(['kod' => ['required', 'string', 'uuid']]);
+        $data = $request->validate([
+            'kod' => ['required', 'string', 'uuid'],
+            Turnstile::FIELD => ['nullable', 'string', 'max:2048'],
+        ]);
+        if (! $turnstile->verify($data[Turnstile::FIELD] ?? null, $request->ip())) {
+            throw ValidationException::withMessages([Turnstile::FIELD => 'Güvenlik doğrulaması tamamlanamadı. Lütfen sayfayı yenileyip yeniden deneyin.']);
+        }
         $letter = $this->find($data['kod']);
         $response = $letter ? [
             'document_no' => $letter->document_no,
@@ -41,6 +49,7 @@ class VerifyController extends Controller
             'subject' => $letter->subject,
             'status' => $letter->status,
             'preview_url' => route('correspondence.verify.pdf', $letter->document_id),
+            'download_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'download' => 1]),
             'original_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'original' => 1]),
             'attachments' => $letter->attachments->map(fn ($attachment) => [
                 'name' => $attachment->name,

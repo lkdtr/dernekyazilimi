@@ -11,6 +11,7 @@ use BahriCanli\EYazisma\Model\TuzelSahis;
 use BahriCanli\EYazisma\Paket;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Modules\Correspondence\Models\Letter;
 use Modules\Correspondence\Models\LetterSequence;
@@ -669,7 +670,7 @@ class CorrespondenceTest extends TestCase
         $this->withHeaders(['X-Site-Url' => 'https://www.ornek.org.tr']);
         $this->getJson('/api/site/config')->assertOk()->assertJsonPath('correspondence.open', true);
         $this->getJson('/api/site/documents/verify?kod='.strtolower($letter->document_id))->assertOk()
-            ->assertExactJson(['document_no' => $letter->document_no, 'document_date' => $letter->document_date->format('d.m.Y'), 'subject' => $letter->subject, 'status' => Letter::NUMBERED, 'preview_url' => route('correspondence.verify.pdf', $letter->document_id), 'original_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'original' => 1]), 'attachments' => []])
+            ->assertExactJson(['document_no' => $letter->document_no, 'document_date' => $letter->document_date->format('d.m.Y'), 'subject' => $letter->subject, 'status' => Letter::NUMBERED, 'preview_url' => route('correspondence.verify.pdf', $letter->document_id), 'download_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'download' => 1]), 'original_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'original' => 1]), 'attachments' => []])
             ->assertHeader('Cache-Control', 'no-store, private')->assertHeader('X-Robots-Tag', 'noindex, nofollow');
         $this->getJson('/api/site/documents/verify?kod='.$draft->document_id)->assertNotFound();
         $this->getJson('/api/site/documents/verify?kod=not-a-code')->assertUnprocessable();
@@ -678,6 +679,27 @@ class CorrespondenceTest extends TestCase
         $this->getJson('/api/site/documents/verify?kod='.$letter->document_id)->assertOk()->assertJsonPath('status', Letter::CANCELLED)->assertJsonMissingPath('cancel_reason');
         $letter->delete();
         $this->getJson('/api/site/documents/verify?kod='.$letter->document_id)->assertNotFound();
+    }
+
+    public function test_with_turnstile_keys_wordpress_verification_needs_the_human_check(): void
+    {
+        $letter = $this->numbered($this->owner());
+        auth()->logout();
+        app(Organization::class)->save(['frame_ancestors' => 'https://www.ornek.org.tr']);
+        $key = app(\App\Support\SiteApi::class)->generateKey();
+        $this->withHeaders(['X-Api-Key' => $key, 'X-Site-Url' => 'https://www.ornek.org.tr']);
+        $url = '/api/site/documents/verify?kod='.$letter->document_id;
+
+        $this->getJson('/api/site/config')->assertJsonPath('correspondence.turnstile_site_key', null);
+
+        config(['services.turnstile.site_key' => 'site-key', 'services.turnstile.secret_key' => 'secret']);
+        Http::fake(['challenges.cloudflare.com/*' => fn ($request) => Http::response(['success' => $request['response'] === 'good'])]);
+
+        $this->getJson('/api/site/config')->assertJsonPath('correspondence.turnstile_site_key', 'site-key');
+        $this->getJson($url)->assertUnprocessable()->assertJsonValidationErrors('turnstile');
+        $this->getJson($url.'&turnstile=bad')->assertUnprocessable()->assertJsonValidationErrors('turnstile');
+        $this->getJson($url.'&turnstile[]=good')->assertUnprocessable()->assertJsonValidationErrors('turnstile');
+        $this->getJson($url.'&turnstile=good')->assertOk()->assertJsonPath('document_no', $letter->document_no);
     }
 
     public function test_wordpress_verification_address_is_configurable_for_new_documents(): void

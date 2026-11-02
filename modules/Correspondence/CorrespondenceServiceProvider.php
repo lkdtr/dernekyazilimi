@@ -5,6 +5,7 @@ namespace Modules\Correspondence;
 use App\Modules\Menu;
 use App\Modules\ModuleServiceProvider;
 use App\Modules\Slots;
+use App\Support\Turnstile;
 use Modules\Correspondence\Models\Letter;
 
 /**
@@ -20,7 +21,11 @@ class CorrespondenceServiceProvider extends ModuleServiceProvider
 
     protected function bootModule(Menu $menu, Slots $slots): void
     {
-        $this->siteApi()->describe('correspondence', fn () => ['open' => true]);
+        $this->siteApi()->describe('correspondence', fn () => [
+            'open' => true,
+            // The site shows the widget and sends its answer as "turnstile".
+            'turnstile_site_key' => app(Turnstile::class)->enabled() ? app(Turnstile::class)->siteKey() : null,
+        ]);
 
         $this->permissions()->group('correspondence', 'Yazışmalar', 70);
         $this->trash()->register('letter', \Modules\Correspondence\Models\Letter::class);
