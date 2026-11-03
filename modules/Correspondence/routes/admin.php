@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Correspondence\Http\Controllers\Admin\AttachmentController;
+use Modules\Correspondence\Http\Controllers\Admin\IncomingController;
 use Modules\Correspondence\Http\Controllers\Admin\LetterController;
 use Modules\Correspondence\Http\Controllers\Admin\PackageController;
 use Modules\Correspondence\Http\Controllers\Admin\SettingsController;
@@ -10,6 +11,21 @@ use Modules\Correspondence\Http\Controllers\Admin\SigningLinkController;
 Route::middleware('permission:correspondence.settings')->group(function () {
     Route::get('/correspondence/settings', [SettingsController::class, 'edit'])->name('correspondence.settings');
     Route::put('/correspondence/settings', [SettingsController::class, 'update'])->name('correspondence.settings.update');
+});
+
+// Before the {letter} routes, which would take "incoming" for a letter.
+Route::middleware('permission:correspondence.incoming')->group(function () {
+    Route::get('/correspondence/incoming/create', [IncomingController::class, 'create'])->name('correspondence.incoming.create');
+    Route::post('/correspondence/incoming', [IncomingController::class, 'store'])->name('correspondence.incoming.store');
+    Route::post('/correspondence/incoming/{incoming}/cancel', [IncomingController::class, 'cancel'])->name('correspondence.incoming.cancel');
+});
+
+Route::middleware('permission:correspondence.view')->group(function () {
+    Route::get('/correspondence/incoming', [IncomingController::class, 'index'])->name('correspondence.incoming');
+    Route::get('/correspondence/incoming/{incoming}', [IncomingController::class, 'show'])->name('correspondence.incoming.show');
+    Route::get('/correspondence/incoming/{incoming}/letter', [IncomingController::class, 'letter'])->name('correspondence.incoming.letter');
+    Route::get('/correspondence/incoming/{incoming}/file', [IncomingController::class, 'file'])->name('correspondence.incoming.file');
+    Route::get('/correspondence/incoming/{incoming}/attachments/{attachment}', [IncomingController::class, 'attachment'])->name('correspondence.incoming.attachment');
 });
 
 Route::middleware('permission:correspondence.manage')->group(function () {

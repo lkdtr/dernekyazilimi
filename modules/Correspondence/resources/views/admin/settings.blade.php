@@ -26,6 +26,14 @@
                     <span class="form-hint">Henüz yazı yazılmamış bir yılın ilk sayısı. Sıra her yıl baştan başlar.</span>
                 </div>
             </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="incoming_format">Gelen evrak sayı biçimi</label>
+                    <input id="incoming_format" name="incoming_format" class="form-control @error('incoming_format') is-invalid @enderror" value="{{ old('incoming_format', $settings->incomingFormat()) }}" maxlength="60" placeholder="{{ \Modules\Correspondence\Support\CorrespondenceSettings::DEFAULT_INCOMING_FORMAT }}">
+                    @error('incoming_format')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    <span class="form-hint">Gelen evrakın sırası giden yazılardan ayrıdır ve her yıl 1'den başlar. <code>{kutuk}</code>, <code>{yil}</code> ve <code>{sira}</code> kullanılabilir. Örnek: <strong>{{ $incomingExample }}</strong></span>
+                </div>
+            </div>
             <dl class="row mb-0">
                 <dt class="col-sm-3">Dernek kütük numarası</dt>
                 <dd class="col-sm-9">{{ $settings->registryNumber() ?? '—' }}</dd>

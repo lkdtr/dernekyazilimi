@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Modules\Correspondence\Models\IncomingDocument;
 use Modules\Correspondence\Models\Letter;
 use Modules\Correspondence\Models\LetterSequence;
 use Modules\Correspondence\Models\SigningSession;
@@ -852,5 +853,126 @@ class CorrespondenceTest extends TestCase
 
         $letter->forceFill(['status' => Letter::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => 'Neden'])->save();
         $this->get('/belge-dogrula?kod='.$letter->document_id)->assertOk()->assertSee('İptal edilmiş belge');
+    }
+
+    public function test_an_incoming_pdf_is_registered_with_a_number_of_its_own(): void
+    {
+        $owner = $this->owner();
+        $outgoing = $this->numbered($owner);
+        $year = now()->year;
+        $pdf = fn (string $name = 'yazi.pdf') => UploadedFile::fake()->createWithContent($name, '%PDF-1.4 gelen yazı');
+        $form = fn (array $overrides = []) => array_replace([
+            'file' => $pdf(),
+            'received_on' => today()->toDateString(),
+            'channel' => 'email',
+            'subject' => 'Mustafa Akgül Özgür Yazılım Kış Kampı Düzenlenmesi',
+            'sender_kind' => 'institution',
+            'sender_name' => 'Anadolu Üniversitesi Rektörlüğü',
+            'document_no' => 'E-63784619-719-1096667',
+            'document_date' => '2026-10-21',
+            'letter_id' => $outgoing->id,
+        ], $overrides);
+
+        // A PDF says nothing about itself: subject and sender are written in the form.
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form(['subject' => '', 'sender_name' => '']))->assertSessionHasErrors(['subject', 'sender_name']);
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form(['file' => UploadedFile::fake()->createWithContent('yazi.pdf', 'not a pdf')]))->assertSessionHasErrors('file');
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form(['received_on' => today()->addDay()->toDateString()]))->assertSessionHasErrors('received_on');
+
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form())->assertSessionHasNoErrors()->assertSessionHas('success-status');
+        $first = IncomingDocument::latest('id')->first();
+        $this->assertSame("G-{$year}/1", $first->registry_no);
+        $this->assertSame(IncomingDocument::PDF, $first->source);
+        $this->assertSame($outgoing->id, $first->letter_id);
+        $this->assertSame('%PDF-1.4 gelen yazı', Storage::disk('local')->get($first->letterPath()));
+
+        // The incoming sequence is apart from the outgoing one.
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form(['attachment_files' => [UploadedFile::fake()->createWithContent('Program.pdf', '%PDF-1.4 program')]]));
+        $second = IncomingDocument::latest('id')->first();
+        $this->assertSame("G-{$year}/2", $second->registry_no);
+        $this->assertSame(['Program.pdf'], $second->attachments->pluck('name')->all());
+        $this->assertSame(1, LetterSequence::find($year)->last_number);
+
+        $this->actingAs($owner)->get('/admin/correspondence/incoming?q=Anadolu')->assertOk()->assertSee("G-{$year}/1")->assertSee("G-{$year}/2");
+        $this->actingAs($owner)->get("/admin/correspondence/incoming/{$first->id}")->assertOk()->assertSee('E-63784619-719-1096667')->assertSee($outgoing->document_no);
+        $this->actingAs($owner)->get("/admin/correspondence/incoming/{$first->id}/letter")->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->actingAs($owner)->get("/admin/correspondence/incoming/{$second->id}/attachments/{$second->attachments->first()->id}")->assertOk()->assertDownload('Program.pdf');
+        $this->actingAs($owner)->get("/admin/correspondence/incoming/{$first->id}/attachments/{$second->attachments->first()->id}")->assertNotFound();
+
+        // A cancelled number is not given again.
+        $this->actingAs($owner)->post("/admin/correspondence/incoming/{$first->id}/cancel", ['cancel_reason' => 'Yanlış kayıt'])->assertSessionHas('success-status');
+        $this->assertTrue($first->fresh()->isCancelled());
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form());
+        $this->assertSame("G-{$year}/3", IncomingDocument::latest('id')->first()->registry_no);
+
+        // The format is a setting.
+        $this->actingAs($owner)->put('/admin/correspondence/settings', ['number_format' => '{yil}/{sira}', 'incoming_format' => 'GELEN', 'start_number' => 1])->assertSessionHasErrors('incoming_format');
+        $this->actingAs($owner)->put('/admin/correspondence/settings', ['number_format' => '{yil}/{sira}', 'incoming_format' => 'GE-{yil}-{sira:3}', 'start_number' => 1])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', $form());
+        $this->assertSame("GE-{$year}-004", IncomingDocument::latest('id')->first()->registry_no);
+    }
+
+    public function test_registering_incoming_documents_is_a_permission_of_its_own(): void
+    {
+        $owner = $this->owner();
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', [
+            'file' => UploadedFile::fake()->createWithContent('yazi.pdf', '%PDF-1.4'), 'received_on' => today()->toDateString(), 'channel' => 'kep', 'subject' => 'Konu', 'sender_name' => 'Gönderen',
+        ])->assertSessionHasNoErrors();
+        $document = IncomingDocument::latest('id')->first();
+
+        $viewer = $this->userWith(['correspondence.view']);
+        $this->actingAs($viewer)->get('/admin/correspondence/incoming')->assertOk()->assertDontSee('Gelen evrak kaydet');
+        $this->actingAs($viewer)->get("/admin/correspondence/incoming/{$document->id}")->assertOk()->assertDontSee('Kaydı iptal et');
+        $this->actingAs($viewer)->get('/admin/correspondence/incoming/create')->assertForbidden();
+        $this->actingAs($viewer)->post("/admin/correspondence/incoming/{$document->id}/cancel", ['cancel_reason' => 'x'])->assertForbidden();
+
+        $clerk = $this->userWith(['correspondence.view', 'correspondence.incoming']);
+        $this->actingAs($clerk)->get('/admin/correspondence/incoming/create')->assertOk()->assertSee('Kaydet ve sayı ver');
+        $this->actingAs($this->userWith(['correspondence.incoming']))->get("/admin/correspondence/incoming/{$document->id}")->assertForbidden();
+    }
+
+    public function test_an_incoming_package_fills_in_its_details_and_attachments(): void
+    {
+        $owner = $this->owner();
+        $draft = $this->letter($owner, ['subject' => 'Kamp işbirliği']);
+        $this->actingAs($owner)->post("/admin/correspondence/{$draft->id}/attachments", ['name' => 'Kamp programı', 'file' => UploadedFile::fake()->createWithContent('program.pdf', '%PDF-1.4 program')]);
+        $letter = $draft;
+        $this->actingAs($owner)->post("/admin/correspondence/{$letter->id}/approve");
+        $letter->refresh();
+        $this->signPdf($letter, $owner);
+        $this->actingAs($owner)->post("/admin/correspondence/{$letter->id}/package")->assertSessionHas('success-status');
+        $digest = $this->actingAs($owner)->get("/admin/correspondence/{$letter->id}/package/digest")->getContent();
+        $signature = $this->cmsSignature($digest, ['commonName' => 'AYŞE YILMAZ', 'serialNumber' => '12345678901']);
+        $this->actingAs($owner)->post("/admin/correspondence/{$letter->id}/package/signature", ['file' => UploadedFile::fake()->createWithContent('imza.imz', $signature)])->assertSessionHas('success-status');
+        $package = $this->actingAs($owner)->get("/admin/correspondence/{$letter->id}/package")->getContent();
+        $upload = fn () => UploadedFile::fake()->createWithContent('gelen.eyp', $package);
+
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', ['file' => UploadedFile::fake()->createWithContent('bozuk.eyp', 'PK not a package'), 'received_on' => today()->toDateString(), 'channel' => 'kep'])->assertSessionHasErrors('file');
+
+        // Left empty, the details come from the package; what is written wins.
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', ['file' => $upload(), 'received_on' => today()->toDateString(), 'channel' => 'kep', 'notes' => 'KEP ile geldi'])->assertSessionHasNoErrors();
+        $document = IncomingDocument::latest('id')->first();
+
+        $this->assertSame(IncomingDocument::EYP, $document->source);
+        $this->assertSame($letter->document_id, $document->document_id);
+        $this->assertSame('Kamp işbirliği', $document->subject);
+        $this->assertSame('Ayşe Yılmaz', $document->sender_name);
+        $this->assertSame('person', $document->sender_kind);
+        $this->assertSame($letter->document_no, $document->document_no);
+        $this->assertSame($letter->document_date->toDateString(), $document->document_date->toDateString());
+        $this->assertSame('AYŞE YILMAZ', $document->signer);
+        $this->assertSame([], $document->findings['errors']);
+        $this->assertSame(['Kamp programı'], $document->attachments->pluck('name')->all());
+        $this->assertSame('%PDF-1.4 program', Storage::disk('local')->get($document->attachments->first()->path));
+        $this->assertStringStartsWith('%PDF-', Storage::disk('local')->get($document->letterPath()));
+        $this->assertSame($package, Storage::disk('local')->get($document->file_path));
+
+        $this->actingAs($owner)->get("/admin/correspondence/incoming/{$document->id}")->assertOk()->assertSee('AYŞE YILMAZ')->assertSee('Paketin yapısı ve özet değerleri geçerli')->assertSee('.eyp indir');
+        $this->actingAs($owner)->get("/admin/correspondence/incoming/{$document->id}/file")->assertOk()->assertDownload('gelen.eyp');
+
+        // The same package is not registered twice while its record stands.
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', ['file' => $upload(), 'received_on' => today()->toDateString(), 'channel' => 'kep'])->assertSessionHasErrors('file');
+        $document->forceFill(['status' => IncomingDocument::CANCELLED])->save();
+        $this->actingAs($owner)->post('/admin/correspondence/incoming', ['file' => $upload(), 'received_on' => today()->toDateString(), 'channel' => 'kep', 'subject' => 'Elle yazılan konu'])->assertSessionHasNoErrors();
+        $this->assertSame('Elle yazılan konu', IncomingDocument::latest('id')->first()->subject);
     }
 }
