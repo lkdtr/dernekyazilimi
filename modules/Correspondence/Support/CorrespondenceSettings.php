@@ -13,6 +13,8 @@ class CorrespondenceSettings
 {
     public const DEFAULT_FORMAT = '{yil}/{sira}';
 
+    public const DEFAULT_INCOMING_FORMAT = 'G-{yil}/{sira}';
+
     public function __construct(private Organization $organization)
     {
     }
@@ -25,6 +27,15 @@ class CorrespondenceSettings
     public function numberFormat(): string
     {
         return $this->organization->get('correspondence_number_format') ?: self::DEFAULT_FORMAT;
+    }
+
+    /**
+     * Template of the registry number of incoming documents, numbered apart
+     * from the outgoing letters: {kutuk}, {yil} and {sira} as above.
+     */
+    public function incomingFormat(): string
+    {
+        return $this->organization->get('correspondence_incoming_format') ?: self::DEFAULT_INCOMING_FORMAT;
     }
 
     /** Public verification page, optionally hosted by the WordPress site. */

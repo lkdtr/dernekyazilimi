@@ -11,6 +11,8 @@ use Modules\Correspondence\Models\Letter;
 /**
  * Outgoing official letters: written, approved and numbered, printed as a
  * PDF and packaged as an e-Yazışma package (.eyp) for signing and sealing.
+ * Incoming documents, as a package or a PDF, are registered with a number
+ * of their own.
  */
 class CorrespondenceServiceProvider extends ModuleServiceProvider
 {
@@ -33,10 +35,12 @@ class CorrespondenceServiceProvider extends ModuleServiceProvider
         $this->permissions()->register('correspondence.manage', 'Yazı yazabilsin, e-Yazışma paketini hazırlayabilsin', 'correspondence', 71);
         $this->permissions()->register('correspondence.approve', 'Yazıyı onaylayıp sayı verebilsin, iptal edebilsin', 'correspondence', 72);
         $this->permissions()->register('correspondence.settings', 'Yazışma ayarlarını düzenleyebilsin', 'correspondence', 73);
+        $this->permissions()->register('correspondence.incoming', 'Gelen evrakı kaydedip sayı verebilsin, kaydı iptal edebilsin', 'correspondence', 74);
 
         $menu->label('admin', 'correspondence', 'Yazışmalar', 'file-text');
         $menu->add('admin', 'correspondence', 'Giden yazılar', 'admin.correspondence', ['correspondence.view'], 70);
-        $menu->add('admin', 'correspondence', 'Yazışma ayarları', 'admin.correspondence.settings', ['correspondence.settings'], 71);
+        $menu->add('admin', 'correspondence', 'Gelen evrak', 'admin.correspondence.incoming', ['correspondence.view'], 71);
+        $menu->add('admin', 'correspondence', 'Yazışma ayarları', 'admin.correspondence.settings', ['correspondence.settings'], 72);
 
         $this->dashboard()->stat('Onay bekleyen yazı', 'file-text', fn () => Letter::where('status', Letter::PENDING)->count(), 'admin.correspondence', ['correspondence.approve'], 60);
     }

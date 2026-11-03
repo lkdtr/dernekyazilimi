@@ -251,6 +251,25 @@ class LetterPackage
      */
     private static function certificateSigner(string $signature): ?array
     {
+        $holder = self::certificateHolder($signature);
+
+        if ($holder === null) {
+            return null;
+        }
+
+        [$first, $last] = self::splitName($holder['name']);
+
+        return [new Imza(new GercekSahis(new Kisi($first, $last), $holder['identity']))];
+    }
+
+    /**
+     * The person whose certificate a CAdES signature carries: the name and
+     * T.C. identity number on it. Null when it carries none.
+     *
+     * @return ?array{name: string, identity: string}
+     */
+    public static function certificateHolder(string $signature): ?array
+    {
         $pem = "-----BEGIN PKCS7-----\n".chunk_split(base64_encode($signature), 64, "\n")."-----END PKCS7-----\n";
 
         if (! @openssl_pkcs7_read($pem, $certificates)) {
@@ -263,9 +282,7 @@ class LetterPackage
             $name = (string) ($parsed['subject']['CN'] ?? '');
 
             if ($name !== '' && preg_match('/^\d{11}$/', $identity)) {
-                [$first, $last] = self::splitName($name);
-
-                return [new Imza(new GercekSahis(new Kisi($first, $last), $identity))];
+                return ['name' => $name, 'identity' => $identity];
             }
         }
 
