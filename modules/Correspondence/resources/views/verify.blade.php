@@ -41,11 +41,12 @@
             <div class="card-body">
                 <h2 class="h2 text-center mb-3">Belge doğrulama</h2>
                 @if ($code !== '')
-                    <div class="alert alert-danger" role="alert">Bu doğrulama koduyla bir belge bulunamadı.</div>
+                    <div class="alert alert-danger" role="alert">Bu doğrulama kodu ve sayıyla bir belge bulunamadı.</div>
                 @endif
-                <p class="text-secondary">{{ $organization->name() }} tarafından gönderilen yazının altındaki belge doğrulama kodunu yazın.</p>
+                <p class="text-secondary">{{ $organization->name() }} tarafından gönderilen yazının altındaki belge doğrulama kodunu ve yazının sayısını yazın.</p>
                 <form method="GET" action="{{ route('correspondence.verify') }}">
-                    <div class="mb-3"><label class="form-label" for="kod">Belge doğrulama kodu</label><input id="kod" name="kod" class="form-control" value="{{ $code }}" maxlength="36" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" required></div>
+                    <div class="mb-3"><label class="form-label required" for="kod">Belge doğrulama kodu</label><input id="kod" name="kod" class="form-control" value="{{ $code }}" maxlength="36" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" required></div>
+                    <div class="mb-3"><label class="form-label required" for="sayi">Yazının sayısı</label><input id="sayi" name="sayi" class="form-control" value="{{ $number }}" maxlength="120" placeholder="ör. 06-061-115-2026-23" required><span class="form-hint">Yazının üst kısmındaki "Sayı" satırında yazar.</span></div>
                     <button type="submit" class="btn btn-primary w-100">Doğrula</button>
                 </form>
             </div>
