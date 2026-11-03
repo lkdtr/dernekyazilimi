@@ -692,6 +692,8 @@ class CorrespondenceTest extends TestCase
             ->assertExactJson(['document_no' => $letter->document_no, 'document_date' => $letter->document_date->format('d.m.Y'), 'subject' => $letter->subject, 'status' => Letter::NUMBERED, 'preview_url' => route('correspondence.verify.pdf', $letter->document_id), 'download_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'download' => 1]), 'original_url' => route('correspondence.verify.pdf', ['code' => $letter->document_id, 'original' => 1]), 'attachments' => []])
             ->assertHeader('Cache-Control', 'no-store, private')->assertHeader('X-Robots-Tag', 'noindex, nofollow');
         $this->getJson('/api/site/documents/verify?kod='.$draft->document_id)->assertNotFound();
+        $this->getJson('/api/site/documents/verify?'.http_build_query(['kod' => $letter->document_id, 'sayi' => ' '.strtolower($letter->document_no).' ']))->assertOk();
+        $this->getJson('/api/site/documents/verify?'.http_build_query(['kod' => $letter->document_id, 'sayi' => '1999/1']))->assertNotFound()->assertJsonPath('message', 'Bu doğrulama kodu ve sayıyla kayıtlı bir belge bulunamadı.');
         $this->getJson('/api/site/documents/verify?kod=not-a-code')->assertUnprocessable();
         $this->getJson('/api/site/documents/verify?kod[]=bad')->assertUnprocessable();
         $letter->forceFill(['status' => Letter::CANCELLED, 'cancel_reason' => 'Private reason'])->save();
@@ -846,8 +848,12 @@ class CorrespondenceTest extends TestCase
         $letter = $this->numbered($owner, ['subject' => 'Doğrulanacak yazı']);
         auth()->logout();
 
-        $this->get('/belge-dogrula')->assertOk()->assertSee('Belge doğrulama kodu');
+        $this->get('/belge-dogrula')->assertOk()->assertSee('Belge doğrulama kodu')->assertSee('Yazının sayısı');
         $this->get('/belge-dogrula?kod='.strtolower($letter->document_id))->assertOk()->assertSee('Belge doğrulandı')->assertSee($letter->document_no)->assertSee('Doğrulanacak yazı')->assertDontSee('Şenliğimize bekleriz');
+
+        // Typed by hand, the number must be the letter's; the QR link carries the code alone.
+        $this->get('/belge-dogrula?'.http_build_query(['kod' => $letter->document_id, 'sayi' => $letter->document_no]))->assertOk()->assertSee('Belge doğrulandı');
+        $this->get('/belge-dogrula?'.http_build_query(['kod' => $letter->document_id, 'sayi' => '1999/1']))->assertNotFound()->assertSee('Bu doğrulama kodu ve sayıyla bir belge bulunamadı')->assertDontSee('Doğrulanacak yazı');
         $this->get('/belge-dogrula?kod='.$draft->document_id)->assertNotFound()->assertSee('bulunamadı');
         $this->get('/belge-dogrula?kod=yok')->assertNotFound();
 

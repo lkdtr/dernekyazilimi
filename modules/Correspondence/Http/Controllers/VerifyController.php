@@ -18,16 +18,20 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Public page that confirms a letter by the verification code printed on it.
  * The verification code grants access to the numbered letter and its attachments.
+ * Typed by hand, the code comes with the number of the letter, which must
+ * match; the QR code carries the code alone.
  */
 class VerifyController extends Controller
 {
     public function show(Request $request): Response
     {
         $code = is_string($request->query('kod')) ? strtoupper(trim($request->query('kod'))) : '';
-        $letter = $code === '' ? null : $this->find($code);
+        $number = is_string($request->query('sayi')) ? trim($request->query('sayi')) : '';
+        $letter = $code === '' ? null : $this->find($code, $number);
 
         return response()->view('correspondence::verify', [
             'code' => $code,
+            'number' => $number,
             'letter' => $letter,
         ], $code !== '' && ! $letter ? 404 : 200)->header('X-Robots-Tag', 'noindex, nofollow');
     }
@@ -37,12 +41,13 @@ class VerifyController extends Controller
         $request->merge(['kod' => is_string($request->query('kod')) ? strtoupper(trim($request->query('kod'))) : $request->query('kod')]);
         $data = $request->validate([
             'kod' => ['required', 'string', 'uuid'],
+            'sayi' => ['nullable', 'string', 'max:120'],
             Turnstile::FIELD => ['nullable', 'string', 'max:2048'],
         ]);
         if (! $turnstile->verify($data[Turnstile::FIELD] ?? null, $request->ip())) {
             throw ValidationException::withMessages([Turnstile::FIELD => 'Güvenlik doğrulaması tamamlanamadı. Lütfen sayfayı yenileyip yeniden deneyin.']);
         }
-        $letter = $this->find($data['kod']);
+        $letter = $this->find($data['kod'], trim((string) ($data['sayi'] ?? '')));
         $response = $letter ? [
             'document_no' => $letter->document_no,
             'document_date' => $letter->document_date?->format('d.m.Y'),
@@ -55,7 +60,7 @@ class VerifyController extends Controller
                 'name' => $attachment->name,
                 'url' => $attachment->hasFile() ? route('correspondence.verify.attachment', ['code' => $letter->document_id, 'attachment' => $attachment->id]) : null,
             ])->values(),
-        ] : ['message' => 'Bu kodla kayıtlı bir belge bulunamadı.'];
+        ] : ['message' => 'Bu doğrulama kodu ve sayıyla kayıtlı bir belge bulunamadı.'];
 
         return response()->json($response, $letter ? 200 : 404)
             ->header('Cache-Control', 'no-store')
@@ -88,9 +93,19 @@ class VerifyController extends Controller
         ]);
     }
 
-    private function find(string $code): ?Letter
+    /**
+     * A number given must be the letter's, written with any case or spacing.
+     */
+    private function find(string $code, string $number = ''): ?Letter
     {
-        return Letter::with('attachments')->where('document_id', $code)->whereIn('status', [Letter::NUMBERED, Letter::CANCELLED])->first();
+        $letter = Letter::with('attachments')->where('document_id', $code)->whereIn('status', [Letter::NUMBERED, Letter::CANCELLED])->first();
+
+        return $letter && ($number === '' || self::normalized($number) === self::normalized((string) $letter->document_no)) ? $letter : null;
+    }
+
+    private static function normalized(string $number): string
+    {
+        return mb_strtoupper(preg_replace('/\s+/u', '', $number), 'UTF-8');
     }
 
 }
