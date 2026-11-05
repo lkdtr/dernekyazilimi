@@ -141,7 +141,7 @@
                         @if ($canManage)
                             {{-- The browser extension replaces this text with its own status; if it stays, the extension is missing or not allowed on this portal. --}}
                             <div id="eyazisma-extension-status" role="status" class="alert alert-warning small">
-                                Tarayıcı eklentisi algılanmadı. İmza uygulamasını eklenti başlatır: <a href="https://addons.mozilla.org/tr/firefox/addon/eyazisma-imza/" target="_blank" rel="noopener noreferrer">Firefox</a> veya <a href="https://chromewebstore.google.com/detail/gdfahhbabofbcgphlaphkegkbahlgjhl" target="_blank" rel="noopener noreferrer">Chrome</a> için e-Yazışma İmza eklentisini ve <a href="https://github.com/bahricanli/eyazisma-imza/releases" target="_blank" rel="noopener noreferrer">imza uygulamasını</a> kurun. Eklenti kuruluysa simgesine tıklayıp bu portala izin verin ve sayfayı yenileyin.
+                                Tarayıcı eklentisi algılanmadı. İmza uygulamasını eklenti başlatır: <a href="https://addons.mozilla.org/tr/firefox/addon/eyazisma-imza/" target="_blank" rel="noopener noreferrer">Firefox</a> veya <a href="https://chromewebstore.google.com/detail/pgengianfoeihehebpjilcckgpadgohk" target="_blank" rel="noopener noreferrer">Chrome</a> için e-Yazışma İmza eklentisini ve <a href="https://github.com/bahricanli/eyazisma-imza/releases" target="_blank" rel="noopener noreferrer">imza uygulamasını</a> kurun. Eklenti kuruluysa simgesine tıklayıp bu portala izin verin ve sayfayı yenileyin.
                             </div>
                         @endif
                         @if (! $package)
