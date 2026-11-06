@@ -138,6 +138,12 @@
                 <div class="card mb-3">
                     <div class="card-header"><h3 class="card-title">e-Yazışma paketi</h3>@if ($package)<div class="card-actions"><span class="badge bg-secondary-lt">{{ $old ? '2.0 öncesi' : '2.x' }}</span></div>@endif</div>
                     <div class="card-body">
+                        @if ($canManage)
+                            {{-- The browser extension replaces this text with its own status; if it stays, the extension is missing or not allowed on this portal. --}}
+                            <div id="eyazisma-extension-status" role="status" class="alert alert-warning small">
+                                Tarayıcı eklentisi algılanmadı. İmza uygulamasını eklenti başlatır: <a href="https://addons.mozilla.org/tr/firefox/addon/eyazisma-imza/" target="_blank" rel="noopener noreferrer">Firefox</a> veya <a href="https://chromewebstore.google.com/detail/pgengianfoeihehebpjilcckgpadgohk" target="_blank" rel="noopener noreferrer">Chrome</a> için e-Yazışma İmza eklentisini ve <a href="https://github.com/bahricanli/eyazisma-imza/releases" target="_blank" rel="noopener noreferrer">imza uygulamasını</a> kurun. Eklenti kuruluysa simgesine tıklayıp bu portala izin verin ve sayfayı yenileyin.
+                            </div>
+                        @endif
                         @if (! $package)
                             <p class="text-secondary small">Önce QR kod ve doğrulama bilgileri eklenmiş PDF imzalanır. EYP, yüklenen imzalı PDF ve eklerden oluşturulur; paket imzası sonraki adımdır.</p>
                             @unless ($letter->hasSignedPdf())
@@ -311,7 +317,7 @@
 
         function ask(index) {
             if (index >= addresses.length) {
-                box.textContent = 'Tarayıcı imza uygulamasına ulaşamadı. Uygulamanın açık olduğundan emin olun; varsa yerel ağ erişimi iznini verip tekrar deneyin.';
+                box.textContent = 'İmza uygulaması şu an açık değil. Tarayıcı eklentisi kuruluysa imza düğmesine bastığınızda uygulamayı kendisi başlatır; eklenti yoksa uygulamayı elle açın ve varsa yerel ağ erişimi iznini verin.';
                 box.hidden = false;
                 return;
             }

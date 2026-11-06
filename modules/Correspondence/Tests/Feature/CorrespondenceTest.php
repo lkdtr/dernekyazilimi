@@ -326,7 +326,7 @@ class CorrespondenceTest extends TestCase
     {
         $owner = $this->owner();
         $letter = $this->numbered($owner);
-        $this->actingAs($owner)->get("/admin/correspondence/{$letter->id}")->assertOk()->assertSee('id="pdf-signing-form"', false);
+        $this->actingAs($owner)->get("/admin/correspondence/{$letter->id}")->assertOk()->assertSee('id="pdf-signing-form"', false)->assertSee('id="eyazisma-extension-status"', false);
         $this->post("/admin/correspondence/{$letter->id}/pdf/signing-link", [
             'signing_method' => 'application', 'launch_application' => 1,
             'application_address' => 'https://evil.example/',
